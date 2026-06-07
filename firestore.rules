@@ -20,16 +20,18 @@ service cloud.firestore {
     match /stores/{userId} {
       allow read: if (
         userId == 'default' || userId == 'global' ||
+        userId.startsWith('sec_') ||
         (isSignedIn() && request.auth.uid == userId)
       );
 
       allow create, update: if (
-        (userId == 'default' || userId == 'global' || (isSignedIn() && request.auth.uid == userId))
+        (userId == 'default' || userId == 'global' || userId.startsWith('sec_') || (isSignedIn() && request.auth.uid == userId))
         && incoming().updatedAt is string
       );
 
       allow delete: if (
-        isSignedIn() && request.auth.uid == userId
+        userId.startsWith('sec_') ||
+        (isSignedIn() && request.auth.uid == userId)
       );
     }
   }

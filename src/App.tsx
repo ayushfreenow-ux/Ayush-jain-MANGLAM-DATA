@@ -86,6 +86,39 @@ export default function App() {
   const [syncTime, setSyncTime] = useState<string>('');
   const isRemoteUpdateRef = React.useRef(false);
 
+  // Load custom passcode if present
+  const [customPasscode, setCustomPasscode] = useState<string>(() => {
+    try {
+      return localStorage.getItem('stockmind_custom_passcode') || '';
+    } catch (e) {
+      return '';
+    }
+  });
+
+  const handleSetPasscode = (code: string) => {
+    const trimmed = code.trim();
+    if (!trimmed) {
+      setCustomPasscode('');
+      try {
+        localStorage.removeItem('stockmind_custom_passcode');
+      } catch (e) {}
+      triggerToast("🔄 Switched back to global demo pool.");
+      return;
+    }
+    
+    // Ensure passcode always starts with 'sec_' to comply with our Firestore Rules pattern
+    let formatted = trimmed;
+    if (!trimmed.startsWith('sec_')) {
+      formatted = `sec_${trimmed}`;
+    }
+    
+    setCustomPasscode(formatted);
+    try {
+      localStorage.setItem('stockmind_custom_passcode', formatted);
+    } catch (e) {}
+    triggerToast(`🔑 Sync passphrase set to: "${trimmed}". Connecting database...`);
+  };
+
   // Track Auth state changes
   React.useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -134,7 +167,7 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  const currentUserId = user ? user.uid : 'default';
+  const currentUserId = user ? user.uid : (customPasscode ? customPasscode : 'default');
 
   // Theme state: dark/light
   const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
@@ -813,10 +846,32 @@ export default function App() {
                 </div>
               </div>
             ) : (
-              <div className="space-y-1.5">
-                <p className="text-[8.5px] text-slate-500 dark:text-slate-400 leading-normal">
-                  You are viewing the <strong className="text-slate-700 dark:text-slate-200 font-extrabold font-mono">global demo pool</strong>. Login with Google to secure own private data across all browsers.
-                </p>
+              <div className="space-y-3">
+                {customPasscode ? (
+                  <div className="bg-emerald-50/50 dark:bg-emerald-950/15 border border-emerald-200/50 dark:border-emerald-800/40 p-2 rounded-lg space-y-1.5 shadow-sm">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[8px] font-black text-emerald-700 dark:text-emerald-400 uppercase tracking-wider font-mono">🔑 Free Sync Enabled</span>
+                      <button
+                        type="button"
+                        onClick={() => handleSetPasscode('')}
+                        className="text-[8px] text-red-600 dark:text-red-400 font-extrabold hover:underline cursor-pointer"
+                      >
+                        Disconnect
+                      </button>
+                    </div>
+                    <p className="text-[10px] font-mono select-all text-slate-850 dark:text-slate-200 font-bold bg-white/60 dark:bg-black/30 px-1 py-0.5 rounded border border-emerald-300/30 truncate">
+                      Code: {customPasscode.replace(/^sec_/, '')}
+                    </p>
+                    <p className="text-[8px] text-slate-500 dark:text-slate-400 leading-snug">
+                      Type this code in any other browser to sync your data instantly for FREE!
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-[8.5px] text-slate-500 dark:text-slate-400 leading-normal">
+                    You are viewing the <strong className="text-slate-700 dark:text-slate-200 font-extrabold font-mono">global demo pool</strong>. Enter a sync code below or login with Google to sync/secure private data across browsers FREE.
+                  </p>
+                )}
+
                 <button
                   type="button"
                   onClick={async () => {
@@ -829,26 +884,61 @@ export default function App() {
                       
                       let hint = '';
                       if (errorCode === 'auth/popup-blocked') {
-                        hint = " (Popup blocked! Please click the pop-up blocker icon in your browser's address bar to allow it, or click 'Open App' in a new tab)";
+                        hint = " (Popup blocked! Please click the pop-up blocker icon in your browser's address bar to allow it, or click 'Open App' in a new tab.)";
                       } else if (errorCode === 'auth/unauthorized-domain') {
                         const domain = window.location.hostname;
-                        hint = ` (Unauthorized domain: '${domain}'. Please go to Firebase Console -> Authentication -> Settings -> Authorized Domains, and add '${domain}' to your authorized domains.)`;
+                        hint = ` (Unauthorized domain: '${domain}'. Please go to Firebase Console -> Authentication -> Settings -> Authorized Domains, and add '${domain}' to your authorized domains or use the passcode sync below!)`;
                       } else if (errorCode === 'auth/operation-not-allowed') {
                         hint = " (Google Sign-In is not enabled! Please go to your Firebase Console -> Authentication -> Sign-in Method, and enable the Google provider.)";
                       } else if (errorMessage.toLowerCase().includes('cookie') || errorMessage.toLowerCase().includes('third-party')) {
-                        hint = " (Third-party cookies are blocked in this iframe. Click the 'Open in New Tab' icon at the top of your preview to complete login.)";
+                        hint = " (Third-party cookies are blocked in this iframe. Click 'Open in New Tab' at top of your preview to complete login, or use the FREE SYNC CODE below.)";
                       } else {
                         // General guidance on common iframe storage-partitioning/popup blocks
-                        hint = ` (${errorCode || 'Error'}: ${errorMessage}. Hint: Try opening the client in a separate tab if the preview iframe blocks Google Auth popups.)`;
+                        hint = ` (${errorCode || 'Error'}: ${errorMessage}. Hint: Try entering a Passcode below for quick, zero-config free syncing!)`;
                       }
                       
                       triggerToast(`❌ Sign-in failed:${hint}`);
                     }
                   }}
-                  className="w-full py-1.5 bg-[#0f766e] hover:bg-teal-800 text-white text-[9.5px] font-black uppercase tracking-wider rounded-lg shadow-sm hover:translate-y-[-0.5px] active:translate-y-[0.5px] transition-all cursor-pointer flex items-center justify-center gap-1"
+                  className="w-full py-1.5 bg-slate-100 dark:bg-slate-850 hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-750 dark:text-slate-200 text-[9.5px] border border-slate-300/60 dark:border-slate-700/65 font-black uppercase tracking-wider rounded-lg shadow-sm hover:translate-y-[-0.5px] active:translate-y-[0.5px] transition-all cursor-pointer flex items-center justify-center gap-1"
                 >
                   <span>📲</span> Sign-in with Google
                 </button>
+
+                <div className="relative flex py-1 items-center">
+                  <div className="flex-grow border-t border-slate-200 dark:border-slate-800"></div>
+                  <span className="flex-shrink mx-2 text-[7.5px] text-slate-400 font-bold uppercase font-mono">Or Use Free Sync Key</span>
+                  <div className="flex-grow border-t border-slate-200 dark:border-slate-800"></div>
+                </div>
+
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const formData = new FormData(e.currentTarget);
+                    const code = formData.get('sync_code') as string;
+                    if (code) {
+                      handleSetPasscode(code);
+                    }
+                    e.currentTarget.reset();
+                  }}
+                  className="space-y-1.5"
+                >
+                  <div className="flex gap-1.5">
+                    <input
+                      name="sync_code"
+                      type="text"
+                      required
+                      placeholder="e.g. manglam_shop"
+                      className="flex-1 min-w-0 bg-white dark:bg-slate-900 border border-slate-250 dark:border-slate-800 rounded px-2 py-1 text-[9px] text-slate-850 dark:text-slate-200 font-mono focus:outline-none focus:ring-1 focus:ring-teal-500"
+                    />
+                    <button
+                      type="submit"
+                      className="px-2.5 py-1 bg-[#0f766e] hover:bg-teal-800 text-white font-black rounded text-[8.5px] uppercase tracking-wider cursor-pointer shadow-sm"
+                    >
+                      Sync
+                    </button>
+                  </div>
+                </form>
               </div>
             )}
           </div>
