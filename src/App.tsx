@@ -29,6 +29,10 @@ import {
   Settings
 } from 'lucide-react';
 
+import { doc, onSnapshot, setDoc, getDoc } from 'firebase/firestore';
+import { onAuthStateChanged, signInWithPopup, signOut, User } from 'firebase/auth';
+import { db, auth, googleProvider, handleFirestoreError, OperationType } from './lib/firebase';
+
 import { STOCKMIND_STORES } from './data/stockmind';
 import { StoreState, InventoryItem, Customer, DeadStockItem } from './types';
 
@@ -76,6 +80,62 @@ export default function App() {
   const [activeStoreKey, setActiveStoreKey] = useState<string>('kapda');
   const [activePage, setActivePage] = useState<PageId>('dashboard');
 
+  // Firebase auth & sync tracking states
+  const [user, setUser] = useState<User | null>(null);
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle');
+  const [syncTime, setSyncTime] = useState<string>('');
+  const isRemoteUpdateRef = React.useRef(false);
+
+  // Track Auth state changes
+  React.useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      setUser(currentUser);
+      if (currentUser) {
+        // Safe data merge transition when user logs in:
+        // Try to fetch existing remote data first
+        try {
+          const targetDocId = currentUser.uid;
+          const docRef = doc(db, 'stores', targetDocId);
+          const snap = await getDoc(docRef);
+          if (snap.exists()) {
+            const data = snap.data();
+            if (data && data.stores) {
+              isRemoteUpdateRef.current = true;
+              setStores(data.stores);
+              triggerToast(`👋 Restored remote cloud backup data for ${currentUser.displayName}!`);
+            }
+          } else {
+            // Seed current local stores to cloud for this brand new user
+            try {
+              await setDoc(docRef, {
+                userId: targetDocId,
+                stores: retrievePersistedDatabase(),
+                updatedAt: new Date().toISOString()
+              });
+              triggerToast(`☁️ Secure cloud profile activated and synced for ${currentUser.displayName}!`);
+            } catch (writeErr) {
+              handleFirestoreError(writeErr, OperationType.WRITE, `stores/${targetDocId}`);
+            }
+          }
+        } catch (err) {
+          console.error("Failed cloud backup matching on login:", err);
+          triggerToast(`⚠️ Connected with local data cache fallback.`);
+          try {
+            handleFirestoreError(err, OperationType.GET, `stores/${currentUser.uid}`);
+          } catch (e) {
+            // Log properly but do not crash user experience in fallback mode
+          }
+        }
+      } else {
+        triggerToast("🌐 Active in global fallback sync. Sign in to lock to your account!");
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  const currentUserId = user ? user.uid : 'default';
+
   // Theme state: dark/light
   const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
     try {
@@ -117,32 +177,86 @@ export default function App() {
 
   const [whatsappMobile, setWhatsappMobile] = useState<string>('');
 
-  // Sync to database each time state changes
+  // 1. Listen for Firestore changes in REAL-TIME: If any client modifies, we receive it instantly
+  React.useEffect(() => {
+    setSyncStatus('syncing');
+    const docRef = doc(db, 'stores', currentUserId);
+
+    const unsubscribe = onSnapshot(docRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        if (data && data.stores) {
+          const localStr = JSON.stringify(stores);
+          const remoteStr = JSON.stringify(data.stores);
+          
+          if (localStr !== remoteStr) {
+            isRemoteUpdateRef.current = true;
+            setStores(data.stores);
+          }
+        }
+      } else {
+        // Document doesn't exist remote. Seed it with the local cached stores
+        setDoc(docRef, {
+          userId: currentUserId,
+          stores: stores,
+          updatedAt: new Date().toISOString()
+        }).catch(err => {
+          console.error("Initial Firestore seeding failed", err);
+          try {
+            handleFirestoreError(err, OperationType.WRITE, `stores/${currentUserId}`);
+          } catch (e) {
+            // Log properly within the environment context
+          }
+        });
+      }
+      setSyncStatus('synced');
+      setSyncTime(new Date().toTimeString().split(' ')[0]);
+    }, (error) => {
+      console.error("Firestore live onSnapshot syncing failed", error);
+      setSyncStatus('error');
+      try {
+        handleFirestoreError(error, OperationType.GET, `stores/${currentUserId}`);
+      } catch (e) {
+        // Log properly within the environment context
+      }
+    });
+
+    return () => unsubscribe();
+  }, [currentUserId]);
+
+  // 2. Sync to local storage & push to Firestore upon local state changes (when modified by user action)
   React.useEffect(() => {
     try {
       localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(stores));
     } catch (e) {
-      console.error("Local storage persist error", e);
+      console.error("Local storage persistent backup write failed", e);
     }
-  }, [stores]);
 
-  // Real-time synchronization across multiple open tabs or windows
-  React.useEffect(() => {
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === LOCAL_STORAGE_KEY && e.newValue) {
-        try {
-          const parsed = JSON.parse(e.newValue);
-          setStores(parsed);
-        } catch (err) {
-          console.error("Cross-tab local storage sync error", err);
-        }
+    if (isRemoteUpdateRef.current) {
+      isRemoteUpdateRef.current = false;
+      return;
+    }
+
+    // Since this is a local state modification, upload it to the central cloud firestore immediately
+    setSyncStatus('syncing');
+    const docRef = doc(db, 'stores', currentUserId);
+    setDoc(docRef, {
+      userId: currentUserId,
+      stores,
+      updatedAt: new Date().toISOString()
+    }).then(() => {
+      setSyncStatus('synced');
+      setSyncTime(new Date().toTimeString().split(' ')[0]);
+    }).catch((err) => {
+      console.error("Failed to upload local state to centralized sync server:", err);
+      setSyncStatus('error');
+      try {
+        handleFirestoreError(err, OperationType.WRITE, `stores/${currentUserId}`);
+      } catch (e) {
+        // Log properly within the environment context
       }
-    };
-    window.addEventListener('storage', handleStorageChange);
-    return () => {
-      window.removeEventListener('storage', handleStorageChange);
-    };
-  }, []);
+    });
+  }, [stores, currentUserId]);
 
   // Mobile menu visibility
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
@@ -613,9 +727,112 @@ export default function App() {
         </div>
 
         {/* Dynamic Sector switcher tabs - default closed to Kapda store */}
-        <div className="p-3 border-b border-wp-border bg-wp-bg transition-colors duration-300 shrink-0">
+        <div className="p-3 border-b border-wp-border bg-wp-bg transition-colors duration-300 shrink-0 space-y-2">
           <div className="flex gap-1.5 p-2 bg-wp-card border border-wp-border rounded-lg items-center justify-center transition-colors duration-300">
             <span className="text-[10px] font-bold text-wp-text">👕 Active: {activeStore.name}</span>
+          </div>
+
+          {/* Central Cloud Remote Sync Widget */}
+          <div className="bg-gradient-to-br from-teal-500/10 via-indigo-500/5 to-slate-500/5 dark:from-teal-500/20 dark:via-indigo-950/20 dark:to-slate-900 border border-teal-500/20 rounded-xl p-3 shadow-md space-y-2.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px]">☁️</span>
+                <h4 className="text-[9.5px] font-extrabold uppercase tracking-widest text-[#0f766e] dark:text-teal-400 font-mono">Central DB Sync</h4>
+              </div>
+
+              {/* Pulsing state light */}
+              <div className="flex items-center gap-1">
+                <span className="relative flex h-2 w-2">
+                  {syncStatus === 'syncing' ? (
+                    <>
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                    </>
+                  ) : syncStatus === 'synced' ? (
+                    <>
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                    </>
+                  )}
+                </span>
+                <span className="text-[8px] font-black uppercase text-slate-500 dark:text-slate-400 font-mono">
+                  {syncStatus}
+                </span>
+              </div>
+            </div>
+
+            {/* Auth section */}
+            {user ? (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 bg-white/45 dark:bg-black/35 p-1.5 rounded-lg border border-slate-200/50 dark:border-slate-800">
+                  {user.photoURL ? (
+                    <img 
+                      src={user.photoURL} 
+                      alt={user.displayName || 'User'} 
+                      referrerPolicy="no-referrer"
+                      className="w-7 h-7 rounded-full border border-teal-500/40 object-cover shrink-0"
+                    />
+                  ) : (
+                    <div className="w-7 h-7 rounded-full bg-teal-800 text-white flex items-center justify-center font-bold text-xs shrink-0 font-mono">
+                      {user.displayName ? user.displayName.charAt(0).toUpperCase() : 'U'}
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[10px] font-black text-slate-800 dark:text-slate-200 truncate leading-tight">
+                      {user.displayName}
+                    </p>
+                    <p className="text-[8px] text-slate-450 dark:text-slate-500 font-mono truncate">
+                      Secure Private Cloud
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex justify-between items-center text-[8.5px]">
+                  <span className="text-slate-400 font-mono">
+                    Time: {syncTime || 'Just now'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        await signOut(auth);
+                        triggerToast("🔒 Logged out of secure sync");
+                      } catch (err) {
+                        console.error(err);
+                      }
+                    }}
+                    className="text-red-600 hover:text-red-700 font-extrabold cursor-pointer hover:underline transition-all"
+                  >
+                    Logout
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                <p className="text-[8.5px] text-slate-500 dark:text-slate-400 leading-normal">
+                  You are viewing the <strong className="text-slate-700 dark:text-slate-200 font-extrabold font-mono">global demo pool</strong>. Login with Google to secure own private data across all browsers.
+                </p>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await signInWithPopup(auth, googleProvider);
+                    } catch (err) {
+                      console.error("Manual login failed:", err);
+                      triggerToast("❌ Google sign-in failed.");
+                    }
+                  }}
+                  className="w-full py-1.5 bg-[#0f766e] hover:bg-teal-800 text-white text-[9.5px] font-black uppercase tracking-wider rounded-lg shadow-sm hover:translate-y-[-0.5px] active:translate-y-[0.5px] transition-all cursor-pointer flex items-center justify-center gap-1"
+                >
+                  <span>📲</span> Sign-in with Google
+                </button>
+              </div>
+            )}
           </div>
         </div>
 

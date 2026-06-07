@@ -1,0 +1,31 @@
+{
+  "entities": {
+    "StoreStateCollection": {
+      "title": "Stores State Data Ledger",
+      "description": "Deep ledger containing inventory listings, billing history records, and customer accounts",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Authorized Google Account owner UID"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp indicating last remote ledger update"
+        },
+        "stores": {
+          "type": "object",
+          "description": "Map representation of Saree Garments and Jewellery StoreState records"
+        }
+      },
+      "required": ["userId", "updatedAt", "stores"]
+    }
+  },
+  "firestore": {
+    "stores/{userId}": {
+      "schema": "StoreStateCollection",
+      "description": "User specific secure stores data sync directory"
+    }
+  }
+}

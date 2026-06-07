@@ -1,0 +1,36 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Default-deny secure catch-all gate
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Global secure primitive definitions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    // Stores collection sync rules
+    match /stores/{userId} {
+      allow read: if (
+        userId == 'default' || userId == 'global' ||
+        (isSignedIn() && request.auth.uid == userId)
+      );
+
+      allow create, update: if (
+        (userId == 'default' || userId == 'global' || (isSignedIn() && request.auth.uid == userId))
+        && incoming().updatedAt is string
+      );
+
+      allow delete: if (
+        isSignedIn() && request.auth.uid == userId
+      );
+    }
+  }
+}
