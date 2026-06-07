@@ -1,0 +1,225 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+@import "tailwindcss";
+
+@variant dark (&:where(.dark, .dark *));
+
+@import url('https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@300;400;600;900&family=Cormorant+Garamond:ital,wght@0,300..700;1,300..700&family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&family=Outfit:wght@100..900&family=Syne:wght@400..800&display=swap');
+
+@theme {
+  --font-sans: "Outfit", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Cormorant Garamond", Georgia, serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --font-display: "Outfit", "Inter", sans-serif;
+  
+  --color-wp-bg: var(--wp-bg);
+  --color-wp-sidebar: var(--wp-sidebar);
+  --color-wp-card: var(--wp-card);
+  --color-wp-border: var(--wp-border);
+  --color-wp-text: var(--wp-text);
+  --color-wp-text-muted: var(--wp-text-muted);
+}
+
+:root {
+  --wp-bg: #f8fafc;
+  --wp-sidebar: #ffffff;
+  --wp-card: #ffffff;
+  --wp-border: #e2e8f0;
+  --wp-text: #0f172a;
+  --wp-text-muted: #64748b;
+}
+
+.dark {
+  --wp-bg: #090e1a;
+  --wp-sidebar: #0f172a;
+  --wp-card: #141e30;
+  --wp-border: #1e293b;
+  --wp-text: #f8fafc;
+  --wp-text-muted: #94a3b8;
+}
+
+/* Custom visual styling to establish the drafting deck atmosphere */
+body {
+  background-color: var(--wp-bg);
+  color: var(--wp-text);
+  font-family: var(--font-sans);
+  overflow-x: hidden;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* High fidelity global dark overrides to instantly styling all views safely */
+.dark body {
+  background-color: #090e1a;
+  color: #f8fafc;
+}
+
+.dark .bg-white {
+  background-color: #141e30 !important;
+}
+
+.dark .bg-slate-50 {
+  background-color: #0d1324 !important;
+}
+
+.dark .bg-slate-100 {
+  background-color: #1e293b !important;
+}
+
+.dark .bg-[#f8fafc] {
+  background-color: #090e1a !important;
+}
+
+.dark .hover\:bg-slate-50\:hover {
+  background-color: #1e293b !important;
+}
+
+.dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]) {
+  border-color: #1e293b !important;
+}
+
+.dark .border-slate-200 {
+  border-color: #1e293b !important;
+}
+
+.dark .border-slate-100 {
+  border-color: #1e293b !important;
+}
+
+.dark .text-slate-900 {
+  color: #f8fafc !important;
+}
+
+.dark .text-slate-800 {
+  color: #f1f5f9 !important;
+}
+
+.dark .text-slate-705 {
+  color: #cbd5e1 !important;
+}
+
+.dark .text-slate-700 {
+  color: #cbd5e1 !important;
+}
+
+.dark .text-slate-650 {
+  color: #cbd5e1 !important;
+}
+
+.dark .text-slate-600 {
+  color: #94a3b8 !important;
+}
+
+.dark .text-slate-550 {
+  color: #94a3b8 !important;
+}
+
+.dark .text-slate-500 {
+  color: #64748b !important;
+}
+
+.dark .text-slate-400 {
+  color: #64748b !important;
+}
+
+.dark input, .dark select, .dark textarea {
+  background-color: #0d1324 !important;
+  color: #f8fafc !important;
+  border-color: #1e293b !important;
+}
+
+.dark input::placeholder, .dark textarea::placeholder {
+  color: #475569 !important;
+}
+
+/* Custom theme utility classes extracted from Bold Typography */
+.text-massive {
+  font-size: clamp(3rem, 10vw, 130px);
+  line-height: 0.85;
+  letter-spacing: -0.04em;
+  font-family: "Outfit", var(--font-sans);
+  font-weight: 900;
+}
+
+.vertical-rail {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+}
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(10px);
+}
+
+.accent-glow {
+  box-shadow: 0 0 40px rgba(187, 255, 0, 0.15);
+}
+
+.serif-italic {
+  font-family: "Cormorant Garamond", 'Georgia', serif;
+  font-style: italic;
+}
+
+/* Custom smooth, subtle scrollbars */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.1);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(187, 255, 0, 0.15);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(187, 255, 0, 0.3);
+}
+
+/* Selection aesthetics */
+::selection {
+  background: #BBFF00;
+  color: #000000;
+}
+
+/* Print-specific media query override for native browser A4 prints */
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+  
+  /* Hide the rest of the application completely */
+  body * {
+    visibility: hidden !important;
+  }
+  
+  /* Display only our formatted print-area component */
+  #print-invoice-area, #print-invoice-area * {
+    visibility: visible !important;
+  }
+  
+  #print-invoice-area {
+    display: block !important;
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 10mm !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Force background colors to print correctly (color-adjust) */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}
+
+

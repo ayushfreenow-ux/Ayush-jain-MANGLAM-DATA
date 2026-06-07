@@ -1,0 +1,6 @@
+{
+  "name": "Aurae Design Studio",
+  "description": "An interactive, high-fidelity spatial layout workspace to generate harmonic color systems, curate typography pairings, and configure animated tactile paper-grain meshes.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
