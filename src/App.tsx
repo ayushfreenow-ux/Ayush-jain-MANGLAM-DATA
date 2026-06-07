@@ -126,6 +126,24 @@ export default function App() {
     }
   }, [stores]);
 
+  // Real-time synchronization across multiple open tabs or windows
+  React.useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === LOCAL_STORAGE_KEY && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          setStores(parsed);
+        } catch (err) {
+          console.error("Cross-tab local storage sync error", err);
+        }
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, []);
+
   // Mobile menu visibility
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
 
@@ -819,7 +837,7 @@ export default function App() {
         </div>
 
         {/* Dynamic page dispatcher */}
-        <div className="flex-1 w-full max-w-7xl mx-auto">
+        <div key={JSON.stringify(stores)} className="flex-1 w-full max-w-7xl mx-auto">
           <AnimatePresence mode="wait">
             {activePage === 'dashboard' && (
               <DashboardView 
