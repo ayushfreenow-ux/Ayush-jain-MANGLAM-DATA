@@ -822,9 +822,27 @@ export default function App() {
                   onClick={async () => {
                     try {
                       await signInWithPopup(auth, googleProvider);
-                    } catch (err) {
+                    } catch (err: any) {
                       console.error("Manual login failed:", err);
-                      triggerToast("❌ Google sign-in failed.");
+                      const errorCode = err?.code || '';
+                      const errorMessage = err?.message || String(err);
+                      
+                      let hint = '';
+                      if (errorCode === 'auth/popup-blocked') {
+                        hint = " (Popup blocked! Please click the pop-up blocker icon in your browser's address bar to allow it, or click 'Open App' in a new tab)";
+                      } else if (errorCode === 'auth/unauthorized-domain') {
+                        const domain = window.location.hostname;
+                        hint = ` (Unauthorized domain: '${domain}'. Please go to Firebase Console -> Authentication -> Settings -> Authorized Domains, and add '${domain}' to your authorized domains.)`;
+                      } else if (errorCode === 'auth/operation-not-allowed') {
+                        hint = " (Google Sign-In is not enabled! Please go to your Firebase Console -> Authentication -> Sign-in Method, and enable the Google provider.)";
+                      } else if (errorMessage.toLowerCase().includes('cookie') || errorMessage.toLowerCase().includes('third-party')) {
+                        hint = " (Third-party cookies are blocked in this iframe. Click the 'Open in New Tab' icon at the top of your preview to complete login.)";
+                      } else {
+                        // General guidance on common iframe storage-partitioning/popup blocks
+                        hint = ` (${errorCode || 'Error'}: ${errorMessage}. Hint: Try opening the client in a separate tab if the preview iframe blocks Google Auth popups.)`;
+                      }
+                      
+                      triggerToast(`❌ Sign-in failed:${hint}`);
                     }
                   }}
                   className="w-full py-1.5 bg-[#0f766e] hover:bg-teal-800 text-white text-[9.5px] font-black uppercase tracking-wider rounded-lg shadow-sm hover:translate-y-[-0.5px] active:translate-y-[0.5px] transition-all cursor-pointer flex items-center justify-center gap-1"
